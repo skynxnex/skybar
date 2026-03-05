@@ -2,7 +2,7 @@
 ## Title: SkyBar
 ## Notes: Movable, resizable power bar...
 ## Author: Skynex4tv
-## Version: 2.0.1
+## Version: 1.0.1
 ## SavedVariables: SkyBarDB
 ## SavedVariablesPerCharacter: SkyBarCharDB
 

@@ -22,6 +22,7 @@ end
 -- ===== Border constants =====
 local BORDER_EDGE_FILE = "Interface\\Tooltips\\UI-Tooltip-Border"
 local DEFAULT_BORDER_COLOR = { r=0, g=0, b=0, a=1.0 } -- fully opaque to prevent bleed
+local UNLOCKED_BORDER_COLOR = { r=1.0, g=0.85, b=0.0, a=1.0 } -- bright gold when unlocked
 
 -- Text format keys and labels
 local TEXT_FORMATS = {
@@ -238,6 +239,13 @@ local txt = bar:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
 txt:SetPoint("CENTER")
 txt:SetText("")
 
+-- Unlock indicator (always visible when unlocked)
+local unlockIndicator = bar:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+unlockIndicator:SetPoint("TOPRIGHT", bar, "TOPRIGHT", -4, -4)
+unlockIndicator:SetText("✥")  -- sparkle symbol
+unlockIndicator:SetTextColor(1.0, 0.85, 0.0, 1.0)  -- bright gold
+unlockIndicator:Hide()
+
 -- Dragging
 bar:SetMovable(true)
 bar:RegisterForDrag("LeftButton")
@@ -263,16 +271,28 @@ local function GetPowerColor()
 end
 
 -- Text formatting
+local function AsNumber(v, fallback)
+  if type(v) == "number" then return v end
+  -- Some modern client APIs can yield "secret" values or nil in edge cases;
+  -- treat anything non-numeric as unavailable.
+  return fallback
+end
+
 local function FormatText(cur, max)
+  cur = AsNumber(cur, 0)
+  max = AsNumber(max, 0)
+
   local fmt = db.textFormat or "CUR_MAX_PCT"
   if fmt == "CUR_MAX" then
     return ("%d / %d"):format(cur, max)
   elseif fmt == "PCT" then
-    return ("%.0f%%"):format((cur/max)*100)
+    local pct = (max > 0) and ((cur / max) * 100) or 0
+    return ("%.0f%%"):format(pct)
   elseif fmt == "CUR" then
     return ("%d"):format(cur)
   else -- CUR_MAX_PCT
-    return ("%d / %d (%.0f%%)"):format(cur, max, (cur/max)*100)
+    local pct = (max > 0) and ((cur / max) * 100) or 0
+    return ("%d / %d (%.0f%%)"):format(cur, max, pct)
   end
 end
 
@@ -280,7 +300,9 @@ end
 local function ApplyBorder()
   if db.borderEnabled then
     border:SetBackdrop({ edgeFile = BORDER_EDGE_FILE, edgeSize = db.borderEdgeSize })
-    border:SetBackdropBorderColor(DEFAULT_BORDER_COLOR.r, DEFAULT_BORDER_COLOR.g, DEFAULT_BORDER_COLOR.b, DEFAULT_BORDER_COLOR.a)
+    -- Use bright gold color when unlocked for visual feedback
+    local c = (not db.locked) and UNLOCKED_BORDER_COLOR or DEFAULT_BORDER_COLOR
+    border:SetBackdropBorderColor(c.r, c.g, c.b, c.a)
     border:Show()
   else
     border:Hide()
@@ -313,6 +335,12 @@ local function ApplyLayout()
   bar:SetAlpha(db.alpha)
   bar:EnableMouse(not db.locked)
   txt:SetShown(db.showText)
+  -- Show unlock indicator when unlocked
+  if not db.locked then
+    unlockIndicator:Show()
+  else
+    unlockIndicator:Hide()
+  end
   ApplyTextureAndBG()
   ApplyBorder()
   UpdateVisibility()
@@ -327,11 +355,11 @@ local function UpdatePower()
     if db.showText then txt:SetText("") end
     return
   end
-  local max = UnitPowerMax("player")
+  local max = AsNumber(UnitPowerMax("player"), 0)
   if max == 0 then
     bar:SetMinMaxValues(0, 1); bar:SetValue(0); txt:SetText(""); return
   end
-  local cur = UnitPower("player")
+  local cur = AsNumber(UnitPower("player"), 0)
   bar:SetMinMaxValues(0, max)
   bar:SetValue(cur)
   local r,g,b = GetPowerColor()
